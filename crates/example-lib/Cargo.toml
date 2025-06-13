@@ -1,0 +1,11 @@
+[package]
+name = "example-lib"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
