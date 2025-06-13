@@ -111,4 +111,5 @@ jobs:
     
     - name: Check workspace
       run: |
-        nix develop -c cargo check --workspace --all-targets
+        # Don't specify --all-targets as it tries to build proc-macros for MUSL
+        nix develop -c cargo check --workspace
