@@ -1,0 +1,114 @@
+name: Build and Test Static Linking
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Nix
+      uses: cachix/install-nix-action@v26
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+    
+    - name: Build with Nix
+      run: |
+        if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+          nix build '.#cross-x86_64-linux'
+        else
+          nix build '.#cross-aarch64-linux'
+        fi
+    
+    - name: Verify static linking
+      run: |
+        echo "Checking binary in result/bin/"
+        file result/bin/example-bin
+        # Verify it's statically linked
+        if file result/bin/example-bin | grep -q "statically linked"; then
+          echo "✓ Binary is statically linked"
+        else
+          echo "✗ Binary is NOT statically linked"
+          exit 1
+        fi
+        
+        # For native arch, also run ldd to double-check
+        if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
+          if ldd result/bin/example-bin 2>&1 | grep -q "not a dynamic executable"; then
+            echo "✓ ldd confirms static linking"
+          else
+            echo "✗ ldd shows dynamic linking"
+            ldd result/bin/example-bin
+            exit 1
+          fi
+        fi
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Nix
+      uses: cachix/install-nix-action@v26
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+    
+    - name: Build with cargo-zigbuild
+      run: |
+        nix develop -c cargo zigbuild --release --target ${{ matrix.target }}
+    
+    - name: Verify static linking
+      run: |
+        echo "Checking binary at target/${{ matrix.target }}/release/example-bin"
+        file target/${{ matrix.target }}/release/example-bin
+        # Verify it's statically linked
+        if file target/${{ matrix.target }}/release/example-bin | grep -q "statically linked"; then
+          echo "✓ Binary is statically linked"
+        else
+          echo "✗ Binary is NOT statically linked"
+          exit 1
+        fi
+    
+    - name: Check binary size
+      run: |
+        ls -lh target/${{ matrix.target }}/release/example-bin
+        size=$(ls -l target/${{ matrix.target }}/release/example-bin | awk '{print $5}')
+        echo "Binary size: $size bytes"
+        # Static binaries should be larger than 300KB due to included libc
+        if [ $size -gt 300000 ]; then
+          echo "✓ Binary size suggests static linking"
+        else
+          echo "⚠ Binary seems too small for a statically linked executable"
+        fi
+
+  test-workspace:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install Nix
+      uses: cachix/install-nix-action@v26
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+    
+    - name: Run tests
+      run: |
+        nix develop -c cargo test --target x86_64-unknown-linux-musl
+    
+    - name: Check workspace
+      run: |
+        nix develop -c cargo check --workspace --all-targets
