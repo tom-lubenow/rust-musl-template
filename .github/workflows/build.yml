@@ -21,20 +21,16 @@ jobs:
       with:
         nix_path: nixpkgs=channel:nixos-unstable
     
-    - name: Build with Nix
+    - name: Build with cargo in nix shell
       run: |
-        if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
-          nix build '.#cross-x86_64-linux'
-        else
-          nix build '.#cross-aarch64-linux'
-        fi
+        nix develop -c cargo build --release --target ${{ matrix.target }}
     
     - name: Verify static linking
       run: |
-        echo "Checking binary in result/bin/"
-        file result/bin/example-bin
+        echo "Checking binary at target/${{ matrix.target }}/release/example-bin"
+        file target/${{ matrix.target }}/release/example-bin
         # Verify it's statically linked
-        if file result/bin/example-bin | grep -q "statically linked"; then
+        if file target/${{ matrix.target }}/release/example-bin | grep -q "statically linked"; then
           echo "✓ Binary is statically linked"
         else
           echo "✗ Binary is NOT statically linked"
@@ -42,12 +38,12 @@ jobs:
         fi
         
         # For native arch, also run ldd to double-check
-        if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ]; then
-          if ldd result/bin/example-bin 2>&1 | grep -q "not a dynamic executable"; then
+        if [ "${{ matrix.target }}" = "x86_64-unknown-linux-musl" ] && [ "$(uname -m)" = "x86_64" ]; then
+          if ldd target/${{ matrix.target }}/release/example-bin 2>&1 | grep -q "not a dynamic executable"; then
             echo "✓ ldd confirms static linking"
           else
             echo "✗ ldd shows dynamic linking"
-            ldd result/bin/example-bin
+            ldd target/${{ matrix.target }}/release/example-bin
             exit 1
           fi
         fi
@@ -112,4 +108,4 @@ jobs:
     - name: Check workspace
       run: |
         # Don't specify --all-targets as it tries to build proc-macros for MUSL
-        nix develop -c cargo check --workspace
+        nix develop -c cargo check --workspace --target x86_64-unknown-linux-musl
