@@ -5,6 +5,7 @@ target/
 # Nix
 result
 result-*
+.direnv/
 
 # Editor
 .vscode/
